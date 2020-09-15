@@ -1,4 +1,41 @@
+# 基本类型
+
+在Kotlin中，基本类型的一些特性和Java中稍有区别。
+
+### 1. 判断相等
+
+在Kotlin中**==**操作符的实际过程为**当左操作数为非null时调用左操作数的equals函数**，否则判断右操作数是否为null。这就引申出Kotlin中可以为null的基本类型的判断相等问题，在kotlin中，当一个基本类型可以为null的时候，其判断相等的特性更像是Java中的包装类型那样，**===**默认会判断左右操作数是否指向同一个对象，而不是数值大小是否相等;而此时**==**调用equals函数则会判断数值是否相等：
+
+```kotlin
+val a: Int? = 1
+val b: Int? = 1
+println(a == b)  // true
+println(a === b)   // false
+```
+
+### 2. 类型转换
+
+在Kotlin中，虽然Int的表数比short更大，但是short类型的变量不能被隐式转换为Int变量，**即在Kotlin中将一个short类型的变量赋值给一个Int类型的变量是非法的**，反之也是非法的。在Kotlin中要想实现这之间的转换，需要显式地调用toChar、toInt等函数；同时Char类型的数也不可能与整形数据直接进行运算，即在Kotlin中，Char变量没有对应的整数结果。
+
+> **虽然在Kotlin中，不同尺度的整型变量之间的转换必须是显式地，但是，在Kotlin中，对运算操作符进行过重载，不同尺度的整型变量进行运算的时候会隐式自动进行类型转换**
+
+### 3. range
+
+在Kotlin中想要通过数组的下标来遍历数组，可以不使用**0 until arr.size**这种形式，直接使用**arr.indices**即可,而**arr.withIndex()**则可以成对访问：
+
+```kotlin
+for (i in arr.indices) {
+	println(arr[i])
+}
+for ((index, value) in arr.withIndex()) {
+    println("the value is ${value}, and the index is ${index}")
+}
+```
+
+同时，**downTo**产生的range对标**a..b**形式的range，即包括收尾两端，而不是对标until。
+
 # 类结构  
+
 ## 一、构造函数  
 
 Kotlin中的构造函数是一个和Java相比有很大不同的地方：一个类可以有一个主构造函数和0至多个二级构造函数。  
@@ -25,13 +62,12 @@ class One(Params...){
 ```
 这里讲解一下各个概念的范围：  
 
-1. 主构造器：主构造器的范围很窄，可以说**只有参数列表**，后面的花括号之后的代码是属于class body的范围，而主构造器是class head，二者没有在范围上没有交集  
-2. 初始化器：名字高大上，实际上就是定义的时候直接初始化，例如上面的name = "Hello World"这种  
-3. initializer block：在class body中使用init括起来的代码块 
-
-我们可以认为主构造器的**作用就是声明字段，而且是声明那些在创建一个类的实例的时候需要外界传递的参数**；而初始化器和初始化块儿则可以执行一些不需要外界传递的字段的初始化和声明。  
+1. 主构造器：主构造器的范围很窄，可以说**只有参数列表与初始化块init**，后面的花括号之后的代码是属于class body的范围，而主构造器是class head，二者没有在范围上没有交集  
+2. 初始化器：名字高大上，实际上就是定义的时候直接初始化，例如上面的name = "Hello World"这种   
 
 > 注意：有一个迷惑的行为，**class body中的initializer block中的代码经过jvm编译之后被划给了主构造器**；在后面的介绍中，二级构造器由于要间接或者直接回调主构造器，所以别忘了这时**initializer block中的初始化代码在二级构造器的代码块之前执行(虽然主构造器是非必须的、可以不定义主构造器，但此时initializer block中的代码依然执行在二级构造器之前**)。
+>
+> **在class body中定义的属性及其初始化器initializer并不属于主构造器**
 
 在Kotlin中，在主构造函数的定义上提供了一种便利的、声明属性的方式，即在主构造器的参数前增加var或者val修饰，那么默认这些参数为类的属性：
 
@@ -115,6 +151,30 @@ class Rectangle : Shape() {
 ```
 注意，这是一个Kotlin和Java不同的点，**在Kotlin中，子类的属性名与基类的属性名不能相同，对于相同的属性名编译器会认为你想要override基类的属性，此时会强制你为该属性增加override修饰，同时要求基类增加open修饰(但是，依然可以通过super来访问基类的同名属性)**。
 
+#### 多个基类
+
+在Kotlin中，如果子类直接或者间接继承了多个基类，**对于其基类之间重名的成员，子类必须对该成员进行重写**，而如果想要访问某一个基类的该成员，必须使用**super<Base**格式的语法：
+
+```kotlin
+open class Rectangle {
+    open fun draw() { /* ... */ }
+}
+
+interface Polygon {
+    fun draw() { /* ... */ } // interface members are 'open' by default
+}
+
+class Square() : Rectangle(), Polygon {
+    // The compiler requires draw() to be overridden:
+    override fun draw() {
+        super<Rectangle>.draw() // call to Rectangle.draw()
+        super<Polygon>.draw() // call to Polygon.draw()
+    }
+}
+```
+
+
+
 ### 3. 委托
 
 在很多场景中，我们对于一个接口中定义的方法，想要通过委托给某一个该结构的实现类来调用，而不是自己去实现它，那么就可以使用**委托**。
@@ -190,9 +250,20 @@ val isEmpty: Boolean
 ```
 ### 1. accessor  
 
-都知道Kotlin中的var和val属性都是由accessor的，而val只有getter没有setter，var二者都有。当我们访问某一个类的实例的某一个属性的时候实际上调用的是其getter accessor；而在为其赋值的时候实际上调用的是setter accessor，而setter accessor方法是有一个参数的。   
+都知道Kotlin中的var和val属性都是由accessor的，而val只有getter没有setter，var二者都有。当我们访问某一个类的实例的某一个属性的时候实际上调用的是其getter accessor；而在为其赋值的时候实际上调用的是setter accessor，而setter accessor方法是有一个参数的。
 
-### 2. Backing Field  
+### 2. accessor的巧用  
+
+在Kotlin中，如果想要对外屏蔽修改，但是内部却可以对变量进行修改，我们可以将其setter设置为private修饰，这样一来外部就无法调用setter修改了：
+
+```kotlin
+var visibility: String = "yes"
+	private set
+```
+
+ 
+
+### 3. Backing Field  
 
 首先声明一下，在Kotlin官方文档中说了在两种情况下一个属性才会**生成Backing Field**：  
 
@@ -214,14 +285,14 @@ Error:(2, 25) Kotlin: Initializer is not allowed here because this property has 
 ```
 如果将上面的setter中注释部分加到setter中，那么该属性就会生成backing field字段，此时就不会报错了。因此我们就知道了一个小细节：**initializer在属性含有backing filed的情况下才被允许**。  
     
-### 3. 对于accessor的理解  
+### 4. 对于accessor的理解  
 
 首先要有这样一个概念：  
 
 * 任何访问属性的实现都是调用getter  
 * 任何修改属性的引用(指的是使用=进行赋值操作)的实现都是调用setter  
 
-需要着重说明的一点是，**initializer是独立的，它并不是调用的setter**  
+需要着重说明的一点是，**initializer是独立的，它并不是调用的setter**。 
 
 ## 四、接口    
 
@@ -266,7 +337,7 @@ list.swap(0, 2) // 'this' inside 'swap()' will hold the value of
 
 1. 扩展的方法的优先级比类的成员方法要低，如果出现了一个扩展方法和该类中一个成员方法同名同参，那么总是会调用成员方法  
 
-2. 调用时只会根据编译时类型来调用对应的扩展方法，而不是根据运行时类型；也就是说父类和子类都有一个同名同参的扩展方法，那么如果某一个变量定义时声明的是父类对象，运行时是子类对象，那么该方法调用的还是在父类上扩展的方法。  
+2. **调用时只会根据编译时类型来调用对应的扩展方法，而不是根据运行时类型**；也就是说父类和子类都有一个同名同参的扩展方法，那么如果某一个变量定义时声明的是父类对象，运行时是子类对象，那么该方法调用的还是在父类上扩展的方法。  
 
    
 
@@ -291,7 +362,17 @@ val <T> List<T>.lastIndex: Int
 但是想要编译器为主构造器中的参数生成上面的函数，需要准许如下几个规则：  
 * 主构造器的参数列表至少含有一个参数
 * 所有的主构造器参数必须使用var或者val修饰  
-* Data Class不可为abstract、sealed或者inner  
+* Data Class不可为abstract、sealed或者inner 
+
+另外，**只有在主构造器中声明的属性才会对上述的几个函数生效，在class body中声明的属性不会生效**：
+
+```kotlin
+data class(var name: String) {
+	var age: Int = 10  // 只有name属性会生效，age不会
+}
+```
+
+
 
 ### 2. Sealed Class
 ### 3. Nested and Inner Class  
@@ -1071,6 +1152,8 @@ operator fun Test.minus(a : Int) :Int = value - a
 
 * 函数的参数可以为任意类型
 * 函数的返回值可以为任意类型
+
+上面的两点也向我们说明了，**在Kotlin中，一个类对于同一个操作符，如+，可以定义多个plus函数，它们的函数原型不同，用来适配不同的场景**。这样一来，该类对象就可以与不同类型的数据直接进行+操作，也可以返回不同的类型。
 
 # 协程
 
