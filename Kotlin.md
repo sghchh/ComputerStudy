@@ -232,6 +232,70 @@ fun main() {
 
 虽然，Derived看起来覆盖了message成员，但是由于是全权委托给了BaseImpl，所以print方法完全是BaseImpl对象执行的结果。
 
+### 4. 属性委派
+
+上面说的是使用Kotlin中提供的委派机制来实现类似于继承的效果，而关于Kotlin中属性的委派要复杂一些。
+
+委派属性的语法为：**val/var <property name: <Type by <expression**
+
+关于这里的expression，需要提供两个函数：**getValue与setValue**，通过名字就可以知道，对被委派的原变量的访问与赋值，都会委派到该expression的getValue和setValue函数上。
+
+```kotlin
+var p: String by Delegate()
+class Delegate {
+    operator fun getValue(thisRef: Any?, property: KProperty<*>): String {
+        return "$thisRef, thank you for delegating '${property.name}' to me!"
+    }
+ 
+    operator fun setValue(thisRef: Any?, property: KProperty<*>, value: String) {
+        println("$value has been assigned to '${property.name}' in $thisRef.")
+    }
+}
+```
+
+值得注意的是，这两个函数中的第一个参数thisRef为**被委派的变量的引用**，在本例中为p；而第二个参数为**被委派的变量的属性对象**，在本例中为**String.kclass**.
+
+#### lazy
+
+lazy()函数时官方提供的一种委派expression lambda，它返回一个Lazy<T对象，该对象可以实现的委派机制是：对被委派的变量第一次调用get时，Lazy对象会执行lambda表达式的代码，并且将保存表达式的结果，后续再次调用get时会返回这里保存的结果。
+
+```kotlin
+val hello: String by lazy {
+            println("this is dele")
+            "hello"
+        }
+```
+
+很明显**lazy()这种官方委派机制，只能用于val变量，因为其没有提供setValue函数**。
+
+#### Observable
+
+这也是一个官方提供的委派机制，这种委派机制有两个参数，**一个代表initialValue，另一个是一个lambda，其参数即为setValue函数对应的参数。看到这里就明白了，我们对被委派属性的每一次赋值操作都会执行该lambda**，因此，该委派机制可以用于var变量。
+
+```kotlin
+var hello: String by Delegates.observable("hello") {
+            prop, old, new ->
+            println("old is ${old}, and new is ${new}")
+}
+hello = "world"
+```
+
+Observable的lambda执行在变量被赋值之后，而**vetoable的lambda执行在变量被赋值之前，除此之外其用法同Observable一样**。
+
+#### 委派给其他属性
+
+这更加简单粗暴，直接将某一个属性委派为另一个属性，所有对该属性的操作，直接转为对委派属性的操作：这种使用方式是使用**：：**
+
+```kotlin
+class MyClass {
+   var newName: Int = 0
+   
+   var oldName: Int by this::newName
+}
+```
+
+
+
 ## 三、属性  
 
 在Kotlin中，属性语Java中的有很大不同：  
@@ -1154,6 +1218,99 @@ operator fun Test.minus(a : Int) :Int = value - a
 * 函数的返回值可以为任意类型
 
 上面的两点也向我们说明了，**在Kotlin中，一个类对于同一个操作符，如+，可以定义多个plus函数，它们的函数原型不同，用来适配不同的场景**。这样一来，该类对象就可以与不同类型的数据直接进行+操作，也可以返回不同的类型。
+
+## 七、Object表达式与声明
+
+有时候我们在使用一个类的时候，需要对其进行微调，但是又不至于大动干戈地专门code一个子类出来，这时候Object表达式与Object声明的作用就体现出来了。
+
+### 1. Object表达式
+
+Object表达式首先是一个表达式，因此，**其可以作为右值使用**。Object表达式通常的**使用场景为：匿名类对象、对类的微调实现**
+
+#### 匿名类
+
+Object表达式用作匿名类与lambda最大的区别就是，lambda只能是用在接口中只定义一个函数的情景，而Object则没有这些限制：
+
+```kotlin
+window.addMouseListener(object : MouseAdapter() {
+    override fun mouseClicked(e: MouseEvent) { /*...*/ }
+
+    override fun mouseEntered(e: MouseEvent) { /*...*/ }
+})
+```
+
+#### 微调类
+
+正如开头所说，当我们想要对一个现有的类进行微调，却又不至于专门定义一个子类的时候，可以使用Object表达式现用：
+
+```kotlin
+open class A(x: Int) {
+    public open print() {
+    	print("hello world")
+    }
+}
+
+interface B { /*...*/ }
+
+val ab: A = object : A(1), B {
+    override print(){
+    	println("hello world")
+    } 
+}
+```
+
+我们在使用的时候，需求只需要将A的print方法换一种实现，对于其他部分没有必要修改，这时候显然没必要专门定义一个A的子类，Object表达式正好派上用场。
+
+同时，上面也展示了，**Object表达式在使用的时候，可以继承多个类和接口，唯一特殊的是对于类的构造器，需要传入具体的参数值(毕竟是作为右值使用，所以需要传递具体的参数值进行初始化)**。
+
+### 2. Object声明
+
+Object声明与表达式不同，其**就是在一个kotlin源文件下，或者在一个class下的一个声明**。
+
+Object声明可以随时随地声明一个“结构”，之后人们可以直接使用该“结构”。
+
+#### 直接在Kotlin文件
+
+直接在Kotlin文件下使用Object声明，其在使用时就像是Java中的静态成员一样，可以直接调用：
+
+```kotlin
+object DataProviderManager {
+    fun registerDataProvider(provider: DataProvider) {
+        // ...
+    }
+
+    val allDataProviders: Collection<DataProvider>
+        get() = // ...
+}
+```
+
+这样一来，我们可以**直接导入该Kotlin文件，然后使用DataProviderManager.registerDataProvider()的形式来访问Object声明中提供的代码**。
+
+而且，我们依然可以在使用Object声明的时候选择继承一些类，只需要在ObjectName后面加上继承的语法即可。
+
+在Kotlin中，**我们就可以通过这种方式实现Java中的Singleton模式的代码，而且，这种形式的Singleton保证是安全的。**
+
+#### 在class下使用
+
+Object在class里声明的格式同在Kotlin文件下是一样的，只不过在使用时需要加上**companion**，其在调用时**更像是Java中的static方法那样，直接通过类名进行调用**：
+
+```kotlin
+class ITest {
+    init {
+        println("this is constructor")
+    }
+    companion object {
+        fun myprintln() {
+            println("this is object")
+        }
+    }
+}
+fun main(args: Array<String>?) {
+    ITest.myprintln()
+}
+```
+
+需要注意的一点是，虽然在Kotlin中，这种形式的Object声明在使用上很像是Java中的静态方法，**但是在jvm中，该Object声明依然被认为是成员函数(这一点比较难懂，虽然是成员函数，但是调用该函数并不会触发任何对象的构造函数)**；想要将其完全变为静态函数那样，需要使用**JvmStatic注释**。
 
 # 协程
 
